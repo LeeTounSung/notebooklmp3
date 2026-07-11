@@ -1,3 +1,6 @@
+notebooklm-py
+pyyaml
+
 name: P3 NotebookLM Math Automation Pipeline
 
 on:
