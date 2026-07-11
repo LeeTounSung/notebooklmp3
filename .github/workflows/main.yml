@@ -1,0 +1,56 @@
+name: P3 NotebookLM Math Automation Pipeline
+
+on:
+  schedule:
+    - cron: '0 19 * * *' # UTC 19:00 = 한국 시간(KST) 오전 4시 정각에 무인 작동
+  workflow_dispatch: # Actions 탭에서 실행 버튼을 눌러 즉시 테스트 구동도 가능
+
+permissions:
+  contents: write # 리포지토리에 푸시하기 위한 명시적 쓰기 권한 확보
+
+jobs:
+  run-p3-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip' # 패키지 설치 속도 향상을 위한 캐싱
+
+      - name: Install Dependencies
+        run: pip install notebooklm-py pyyaml
+
+      - name: Restore Google Session Token
+        env:
+          NOTEBOOKLM_AUTH: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
+        run: |
+          # 환경 변수를 통해 안전하게 JSON 파일 생성 (특수문자 파싱 오류 방지)
+          echo "$NOTEBOOKLM_AUTH" > storage_state.json
+
+      - name: Execute Math Processing Core
+        run: python p3_auto_pipeline.py
+
+      - name: Automatically Commit and Push to Repository
+        run: |
+          # 공식 GitHub Actions 봇 이메일 규격 사용
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          # 디렉토리가 비어있거나 파일이 없을 경우를 대비해 오류 무시
+          git add output/ processed_pdfs.txt || true
+          
+          # 변경 사항이 있을 때만 커밋 및 푸시 수행
+          if ! git diff --staged --quiet; then
+            git commit -m "🤖 봇: p3 신규 수학 문제집 가공 데이터 추가"
+            git push
+          else
+            echo "새로 추가되거나 변경된 데이터가 없습니다."
+          fi
+
+      - name: Cleanup Secrets
+        if: always() # 성공/실패 여부와 상관없이 항상 실행
+        run: rm -f storage_state.json
